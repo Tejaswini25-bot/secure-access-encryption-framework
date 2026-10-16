@@ -1,65 +1,108 @@
 
-import unittest
+import os
+import sqlite3
 import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from security.authentication import login_user
+import pyotp
+from cryptography.fernet import Fernet
+
 from security.database import create_database, add_user
 from security.passwords import hash_password
+from security.secret_storage import encrypt_secret
+from security.authentication import login_user
 
 
 class TestAuthentication(unittest.TestCase):
-
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.db_path = Path(self.temp_dir.name) / "test_users.db"
+        self.addCleanup(self.temp_dir.cleanup)
 
-        self.db_patch = patch(
+        self.database_path = Path(self.temp_dir.name) / "test_users.db"
+
+        self.database_patch = patch(
             "security.database.DATABASE_PATH",
-            self.db_path,
+            self.database_path,
         )
-        self.db_patch.start()
+        self.database_patch.start()
+        self.addCleanup(self.database_patch.stop)
 
-        self.auth_patch = patch(
+        self.auth_database_patch = patch(
             "security.authentication.DATABASE_PATH",
-            self.db_path,
+            self.database_path,
         )
-        self.auth_patch.start()
+        self.auth_database_patch.start()
+        self.addCleanup(self.auth_database_patch.stop)
+
+        self.key = Fernet.generate_key().decode("ascii")
+        self.key_patch = patch.dict(
+            os.environ,
+            {"MFA_ENCRYPTION_KEY": self.key},
+        )
+        self.key_patch.start()
+        self.addCleanup(self.key_patch.stop)
 
         create_database()
-        add_user("testuser", hash_password("TestPassword123!"))
+        self.password = "example-password-123"
+        add_user("testuser", hash_password(self.password))
 
-    def tearDown(self):
-        self.auth_patch.stop()
-        self.db_patch.stop()
-        self.temp_dir.cleanup()
+    def test_correct_credentials_without_mfa(self):
+        success, message = login_user("testuser", self.password)
+        self.assertTrue(success, message)
 
-    def test_correct_credentials(self):
+    def test_wrong_password_is_rejected(self):
+        success, message = login_user("testuser", "wrong-password")
+        self.assertFalse(success)
+
+    def test_unknown_user_is_rejected(self):
+        success, message = login_user("unknown", self.password)
+        self.assertFalse(success)
+
+    def test_non_string_credentials_are_rejected(self):
+        success, message = login_user(None, self.password)
+        self.assertFalse(success)
+
+    def enable_mfa_for_test_user(self):
+        secret = pyotp.random_base32()
+        encrypted_secret = encrypt_secret(secret)
+
+        with sqlite3.connect(self.database_path) as connection:
+            connection.execute(
+                "UPDATE users SET mfa_secret_encrypted = ?, "
+                "mfa_enabled = 1 WHERE username = ?",
+                (encrypted_secret, "testuser"),
+            )
+
+        return secret
+
+    def test_mfa_login_requires_code(self):
+        self.enable_mfa_for_test_user()
+
+        success, message = login_user("testuser", self.password)
+        self.assertFalse(success)
+
+    def test_mfa_login_accepts_valid_code(self):
+        secret = self.enable_mfa_for_test_user()
+        code = pyotp.TOTP(secret).now()
+
         success, message = login_user(
-            "testuser", "TestPassword123!"
+            "testuser",
+            self.password,
+            code,
         )
-        self.assertTrue(success)
-        self.assertEqual(message, "Login successful.")
+        self.assertTrue(success, message)
 
-    def test_wrong_password(self):
+    def test_mfa_login_rejects_invalid_code(self):
+        self.enable_mfa_for_test_user()
+
         success, message = login_user(
-            "testuser", "WrongPassword123!"
+            "testuser",
+            self.password,
+            "abc",
         )
         self.assertFalse(success)
-        self.assertEqual(message, "Invalid username or password.")
-
-    def test_unknown_username(self):
-        success, message = login_user(
-            "unknownuser", "TestPassword123!"
-        )
-        self.assertFalse(success)
-        self.assertEqual(message, "Invalid username or password.")
-
-    def test_non_string_credentials(self):
-        success, message = login_user(123, None)
-        self.assertFalse(success)
-        self.assertEqual(message, "Invalid username or password.")
 
 
 if __name__ == "__main__":

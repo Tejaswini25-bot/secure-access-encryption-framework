@@ -12,9 +12,32 @@ def create_database():
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL
+                password_hash TEXT NOT NULL,
+                mfa_secret_encrypted TEXT,
+                mfa_enabled INTEGER NOT NULL DEFAULT 0
+                    CHECK (mfa_enabled IN (0, 1))
             )
         """)
+
+        # Add these columns to older databases without deleting users.
+        columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(users)"
+            ).fetchall()
+        }
+
+        if "mfa_secret_encrypted" not in columns:
+            connection.execute(
+                "ALTER TABLE users ADD COLUMN mfa_secret_encrypted TEXT"
+            )
+
+        if "mfa_enabled" not in columns:
+            connection.execute("""
+                ALTER TABLE users
+                ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0
+                    CHECK (mfa_enabled IN (0, 1))
+            """)
 
 
 def add_user(username, password_hash):
