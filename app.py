@@ -9,8 +9,27 @@ def has_reached_demo_threshold(attempts, threshold=5):
     return attempts >= threshold
 
 
-def is_nonempty_username(username):
-    return bool(username.strip())
+def is_valid_username(username):
+    if not isinstance(username, str):
+        return False
+
+    if not 3 <= len(username) <= 32:
+        return False
+
+    letters_and_digits = (
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "0123456789"
+    )
+    allowed_characters = letters_and_digits + "_.-"
+
+    if username[0] not in letters_and_digits:
+        return False
+
+    return all(
+        character in allowed_characters
+        for character in username
+    )
 
 
 def main():
@@ -34,21 +53,17 @@ def main():
 
     show_mfa_status(mfa_enabled)
 
-    threshold_reached = has_reached_demo_threshold(
-        failed_login_attempts
-    )
-
-    if threshold_reached:
+    if has_reached_demo_threshold(failed_login_attempts):
         print("Example status: threshold reached")
     else:
         print("Example status: below the example threshold")
 
     username = input("Enter a demo username: ")
 
-    if is_nonempty_username(username):
+    if is_valid_username(username):
         print("Username input accepted.")
     else:
-        print("Username cannot be empty or whitespace.")
+        print("Invalid username. Follow the username rules.")
 
     print("Planned features:", planned_features)
 
