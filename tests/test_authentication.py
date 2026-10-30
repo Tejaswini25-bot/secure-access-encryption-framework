@@ -162,6 +162,15 @@ class TestAuthentication(unittest.TestCase):
         self.assertFalse(success)
         self.assertEqual(self.get_failed_attempts("unknown"), 1)
 
+    def test_sql_injection_username_is_rejected(self):
+        malicious_username = "' OR '1'='1' --"
+
+        success, message = login_user(
+            malicious_username,
+            self.password,
+        )
+
+        self.assertFalse(success)
 
 if __name__ == "__main__":
     unittest.main()
