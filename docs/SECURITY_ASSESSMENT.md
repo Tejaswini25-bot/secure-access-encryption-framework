@@ -1,13 +1,12 @@
-
 # Security Vulnerability Assessment Report
 
 **Project:** Secure Access Encryption Framework  
 **Assessment Date:** 30 October 2026  
-**Assessment Type:** Static Code Analysis and Dependency Audit
+**Assessment Type:** Static Code Analysis, Dependency Audit, and Automated Security Testing
 
 ## 1. Objective
 
-The objective of this assessment was to identify potential security weaknesses in the Secure Access Encryption Framework using automated security scanning tools.
+The objective of this assessment was to identify potential security weaknesses in the Secure Access Encryption Framework using automated security scanning tools, dependency auditing, and functional security testing.
 
 ## 2. Tools Used
 
@@ -15,7 +14,7 @@ The objective of this assessment was to identify potential security weaknesses i
 |---|---|
 | Bandit 1.9.4 | Python source-code security analysis |
 | pip-audit 2.10.1 | Python dependency vulnerability scanning |
-| Python unittest | Automated functional and regression testing |
+| Python unittest | Automated functional and security testing |
 
 ## 3. Static Code Analysis
 
@@ -64,14 +63,15 @@ A second dependency audit was performed.
 
 **Final result:** No known vulnerabilities found.
 
-## 5. Functional and Regression Testing
+## 5. Functional and Security Testing
 
-The complete automated test suite was executed after the dependency upgrade.
+The complete automated test suite was executed after the latest code changes.
 
 | Test category | Result |
 |---|---|
 | Application helpers | Passed |
 | Authentication | Passed |
+| SQL injection protection | Passed |
 | AES-256 file encryption | Passed |
 | MFA | Passed |
 | MFA enrollment | Passed |
@@ -80,9 +80,25 @@ The complete automated test suite was executed after the dependency upgrade.
 | Rate limiting | Passed |
 | Secret storage | Passed |
 
-**Total tests:** 70  
-**Passed:** 70  
+**Total tests:** 72  
+**Passed:** 72  
 **Failed:** 0
+
+### Additional Security Checks
+
+The following security scenarios were specifically tested:
+
+1. SQL injection attempts using a malicious username were rejected.
+2. Login without a required MFA code was rejected.
+3. Invalid MFA codes were rejected.
+4. Expired password-reset OTPs were rejected.
+5. OTP reuse was prevented.
+6. Five incorrect OTP attempts invalidated the OTP.
+7. OTP hashing and verification were tested.
+8. Modified encrypted files were rejected.
+9. Incorrect file-decryption passwords were rejected.
+
+**Result:** All focused security tests passed.
 
 ## 6. Security Features Evaluated
 
@@ -97,6 +113,7 @@ The project includes the following security mechanisms:
 7. AES-256-GCM file encryption.
 8. Scrypt-based encryption key derivation.
 9. Authentication and input validation.
+10. Parameterized database queries to protect against SQL injection.
 
 ## 7. Recommendations
 
@@ -112,7 +129,7 @@ The following improvements are recommended:
 
 ## 8. Assessment Limitations
 
-This assessment used automated static analysis, dependency auditing, and functional tests.
+This assessment used automated static analysis, dependency auditing, and functional security tests.
 
 These tools do not identify every possible vulnerability.
 
@@ -124,8 +141,11 @@ Therefore, the results should not be interpreted as proof that the application i
 
 The assessment identified no Bandit findings in the application code and no known dependency vulnerabilities after upgrading pip.
 
-All 70 automated tests passed after remediation.
+All 72 automated tests passed.
+
+Focused security tests also confirmed the expected behavior for SQL injection rejection, MFA enforcement, password-reset OTP protection, and encrypted-file integrity.
 
 Five low-severity Bandit findings remain in test files because they involve dummy test credentials.
 
-The project demonstrates several important security mechanisms and has successfully completed this initial automated vulnerability assessment.
+The project demonstrates several important security mechanisms and has successfully completed an initial automated vulnerability assessment and functional security testing.
+
