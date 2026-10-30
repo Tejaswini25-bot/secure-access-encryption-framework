@@ -1,6 +1,6 @@
-
 import os
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,6 +36,13 @@ class TestAuthentication(unittest.TestCase):
         self.auth_database_patch.start()
         self.addCleanup(self.auth_database_patch.stop)
 
+        self.rate_limiter_database_patch = patch(
+            "security.rate_limiter.DATABASE_PATH",
+            self.database_path,
+        )
+        self.rate_limiter_database_patch.start()
+        self.addCleanup(self.rate_limiter_database_patch.stop)
+
         self.key = Fernet.generate_key().decode("ascii")
         self.key_patch = patch.dict(
             os.environ,
@@ -68,14 +75,26 @@ class TestAuthentication(unittest.TestCase):
         secret = pyotp.random_base32()
         encrypted_secret = encrypt_secret(secret)
 
-        with sqlite3.connect(self.database_path) as connection:
-            connection.execute(
-                "UPDATE users SET mfa_secret_encrypted = ?, "
-                "mfa_enabled = 1 WHERE username = ?",
-                (encrypted_secret, "testuser"),
-            )
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE users SET mfa_secret_encrypted = ?, "
+                    "mfa_enabled = 1 WHERE username = ?",
+                    (encrypted_secret, "testuser"),
+                )
 
         return secret
+
+    def get_failed_attempts(self, username="testuser"):
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            with connection:
+                row = connection.execute(
+                    "SELECT failed_attempts FROM login_attempts "
+                    "WHERE username = ?",
+                    (username,),
+                ).fetchone()
+
+        return row[0] if row else 0
 
     def test_mfa_login_requires_code(self):
         self.enable_mfa_for_test_user()
@@ -104,6 +123,46 @@ class TestAuthentication(unittest.TestCase):
         )
         self.assertFalse(success)
 
+    def test_five_failed_logins_block_correct_password(self):
+        for _ in range(5):
+            success, _ = login_user("testuser", "wrong-password")
+            self.assertFalse(success)
+
+        success, message = login_user("testuser", self.password)
+
+        self.assertFalse(success)
+        self.assertEqual(self.get_failed_attempts(), 5)
+
+    def test_successful_login_resets_failed_attempts(self):
+        for _ in range(3):
+            login_user("testuser", "wrong-password")
+
+        self.assertEqual(self.get_failed_attempts(), 3)
+
+        success, message = login_user("testuser", self.password)
+
+        self.assertTrue(success, message)
+        self.assertEqual(self.get_failed_attempts(), 0)
+
+    def test_invalid_mfa_code_counts_as_failed_attempt(self):
+        self.enable_mfa_for_test_user()
+
+        success, _ = login_user(
+            "testuser",
+            self.password,
+            "000000",
+        )
+
+        self.assertFalse(success)
+        self.assertEqual(self.get_failed_attempts(), 1)
+
+    def test_unknown_username_counts_as_failed_attempt(self):
+        success, _ = login_user("unknown", self.password)
+
+        self.assertFalse(success)
+        self.assertEqual(self.get_failed_attempts("unknown"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
+

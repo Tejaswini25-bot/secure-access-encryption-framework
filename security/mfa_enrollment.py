@@ -1,5 +1,6 @@
 
 import sqlite3
+from contextlib import closing
 
 from security.database import DATABASE_PATH, create_database
 from security.mfa import (
@@ -17,12 +18,13 @@ def begin_mfa_enrollment(username):
     create_database()
 
     try:
-        with sqlite3.connect(DATABASE_PATH) as connection:
-            row = connection.execute(
-                "SELECT mfa_enabled, mfa_secret_encrypted "
-                "FROM users WHERE username = ?",
-                (username,),
-            ).fetchone()
+        with closing(sqlite3.connect(DATABASE_PATH)) as connection:
+            with connection:
+                row = connection.execute(
+                    "SELECT mfa_enabled, mfa_secret_encrypted "
+                    "FROM users WHERE username = ?",
+                    (username,),
+                ).fetchone()
     except sqlite3.Error:
         return False, "MFA enrollment could not be started.", None
 
@@ -46,16 +48,23 @@ def begin_mfa_enrollment(username):
         return False, "MFA secret encryption is unavailable.", None
 
     try:
-        with sqlite3.connect(DATABASE_PATH) as connection:
-            connection.execute(
-                "UPDATE users SET mfa_secret_encrypted = ? "
-                "WHERE username = ? AND mfa_enabled = 0 "
-                "AND mfa_secret_encrypted IS NULL",
-                (encrypted_secret, username),
-            )
+        with closing(sqlite3.connect(DATABASE_PATH)) as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE users SET mfa_secret_encrypted = ? "
+                    "WHERE username = ? AND mfa_enabled = 0 "
+                    "AND mfa_secret_encrypted IS NULL",
+                    (encrypted_secret, username),
+                )
 
-            if connection.execute("SELECT changes()").fetchone()[0] != 1:
-                return False, "MFA enrollment could not be started.", None
+                if connection.execute(
+                    "SELECT changes()"
+                ).fetchone()[0] != 1:
+                    return (
+                        False,
+                        "MFA enrollment could not be started.",
+                        None,
+                    )
     except sqlite3.Error:
         return False, "MFA enrollment could not be saved.", None
 
@@ -70,12 +79,13 @@ def confirm_mfa_enrollment(username, code):
     create_database()
 
     try:
-        with sqlite3.connect(DATABASE_PATH) as connection:
-            row = connection.execute(
-                "SELECT mfa_secret_encrypted, mfa_enabled "
-                "FROM users WHERE username = ?",
-                (username,),
-            ).fetchone()
+        with closing(sqlite3.connect(DATABASE_PATH)) as connection:
+            with connection:
+                row = connection.execute(
+                    "SELECT mfa_secret_encrypted, mfa_enabled "
+                    "FROM users WHERE username = ?",
+                    (username,),
+                ).fetchone()
     except sqlite3.Error:
         return False, "MFA confirmation could not be completed."
 
@@ -99,17 +109,21 @@ def confirm_mfa_enrollment(username, code):
         return False, "Invalid MFA code."
 
     try:
-        with sqlite3.connect(DATABASE_PATH) as connection:
-            connection.execute(
-                "UPDATE users SET mfa_enabled = 1 "
-                "WHERE username = ? AND mfa_enabled = 0 "
-                "AND mfa_secret_encrypted = ?",
-                (username, encrypted_secret),
-            )
+        with closing(sqlite3.connect(DATABASE_PATH)) as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE users SET mfa_enabled = 1 "
+                    "WHERE username = ? AND mfa_enabled = 0 "
+                    "AND mfa_secret_encrypted = ?",
+                    (username, encrypted_secret),
+                )
 
-            if connection.execute("SELECT changes()").fetchone()[0] != 1:
-                return False, "MFA could not be enabled."
+                if connection.execute(
+                    "SELECT changes()"
+                ).fetchone()[0] != 1:
+                    return False, "MFA could not be enabled."
     except sqlite3.Error:
         return False, "MFA could not be enabled."
 
     return True, "MFA enabled successfully."
+

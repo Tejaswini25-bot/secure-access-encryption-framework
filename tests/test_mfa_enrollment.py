@@ -1,6 +1,7 @@
 
 import os
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,7 +56,7 @@ class TestMFAEnrollment(unittest.TestCase):
         self.assertTrue(success, message)
         self.assertTrue(uri.startswith("otpauth://totp/"))
 
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection:
             row = connection.execute(
                 "SELECT mfa_secret_encrypted, mfa_enabled "
                 "FROM users WHERE username = ?",
@@ -73,7 +74,7 @@ class TestMFAEnrollment(unittest.TestCase):
         success, message, uri = begin_mfa_enrollment("testuser")
         self.assertTrue(success, message)
 
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection:
             encrypted_secret = connection.execute(
                 "SELECT mfa_secret_encrypted FROM users "
                 "WHERE username = ?",
@@ -87,7 +88,7 @@ class TestMFAEnrollment(unittest.TestCase):
         success, message = confirm_mfa_enrollment("testuser", code)
         self.assertTrue(success, message)
 
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection:
             enabled = connection.execute(
                 "SELECT mfa_enabled FROM users WHERE username = ?",
                 ("testuser",),
@@ -102,7 +103,7 @@ class TestMFAEnrollment(unittest.TestCase):
         success, message = confirm_mfa_enrollment("testuser", "abc")
         self.assertFalse(success)
 
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection:
             enabled = connection.execute(
                 "SELECT mfa_enabled FROM users WHERE username = ?",
                 ("testuser",),
@@ -119,7 +120,7 @@ class TestMFAEnrollment(unittest.TestCase):
         success, message, uri = begin_mfa_enrollment("testuser")
         self.assertTrue(success, message)
 
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection:
             encrypted_secret = connection.execute(
                 "SELECT mfa_secret_encrypted FROM users "
                 "WHERE username = ?",
