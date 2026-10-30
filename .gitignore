@@ -27,3 +27,6 @@ htmlcov/
 
 # Local application database
 users.db
+
+# Email credentials
+email.env
