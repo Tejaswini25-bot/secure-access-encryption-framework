@@ -24,6 +24,7 @@ def _prepare_database():
 
 
 def is_locked(username, now=None):
+    """Check whether a username is currently locked."""
     if not isinstance(username, str) or not username:
         raise ValueError("A valid username is required.")
 
@@ -38,6 +39,7 @@ def is_locked(username, now=None):
                     "WHERE username = ?",
                     (username,),
                 ).fetchone()
+
     except sqlite3.Error as exc:
         raise RateLimiterError(
             "Could not check login lockout status."
@@ -47,6 +49,7 @@ def is_locked(username, now=None):
 
 
 def record_failed_attempt(username, now=None):
+    """Record a failed login and enforce the lockout policy."""
     if not isinstance(username, str) or not username:
         raise ValueError("A valid username is required.")
 
@@ -67,7 +70,12 @@ def record_failed_attempt(username, now=None):
                 if row is not None and row[1] > current_time:
                     return True
 
-                attempts = row[0] if row is not None else 0
+                # Start a fresh counter after an expired lockout.
+                if row is not None and row[1] > 0:
+                    attempts = 0
+                else:
+                    attempts = row[0] if row is not None else 0
+
                 attempts += 1
 
                 locked_until = (
@@ -97,6 +105,7 @@ def record_failed_attempt(username, now=None):
 
 
 def reset_failed_attempts(username):
+    """Clear failed login attempts after successful authentication."""
     if not isinstance(username, str) or not username:
         raise ValueError("A valid username is required.")
 
@@ -109,6 +118,7 @@ def reset_failed_attempts(username):
                     "DELETE FROM login_attempts WHERE username = ?",
                     (username,),
                 )
+
         return True
 
     except sqlite3.Error as exc:

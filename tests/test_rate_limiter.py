@@ -102,7 +102,29 @@ class TestRateLimiter(unittest.TestCase):
             rows,
             [("alice", 1), ("bob", 1)],
         )
+    def test_failed_attempt_counter_resets_after_lockout_expires(self):
+        for _ in range(MAX_FAILED_ATTEMPTS):
+            record_failed_attempt("testuser", now=1000)
 
+        # The lockout has expired.
+        current_time = 1000 + LOCKOUT_SECONDS + 1
+
+        # A new failed attempt should start a fresh counter.
+        locked = record_failed_attempt(
+            "testuser",
+            now=current_time,
+        )
+
+        self.assertFalse(locked)
+
+        with closing(sqlite3.connect(self.database_path)) as connection:
+            row = connection.execute(
+                "SELECT failed_attempts FROM login_attempts "
+                "WHERE username = ?",
+                ("testuser",),
+            ).fetchone()
+
+        self.assertEqual(row[0], 1)
 
 if __name__ == "__main__":
     unittest.main()
